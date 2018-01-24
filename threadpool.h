@@ -36,6 +36,7 @@ typedef struct ThreadPool
     pthread_t join_thread;
     int num_of_threads;
     int is_distroy;
+    int thread_pool_free_flag;
     int available_thread_count;
     int num_of_tasks;
 
@@ -46,15 +47,20 @@ typedef struct Task
     void *(*task_f)(void *);
     void *arg;
     pthread_t *tids;
-    int thread_count;
 } task;
 
-typedef struct data_ret{
-int incircle;
-}data_ret;
+
+//initalizing the thread pool
 thread_pool *create(int num_threads,int threads_per_task,int max_task_count);
-int destroy_threadpool(thread_pool *tp,int wait_task_flag);
+//destroing the thread pool
+void destroy_threadpool(thread_pool *tp);
+//retrun a memory pool with the results
+char* join_threadpool(thread_pool *tp,int wait_task_flag);
+//inserting new tasks
 int thread_pool_insert_task(thread_pool *tp, void (*task_f)(void *), void *arg);
+//freing thread pool data mutex con var....
 int free_threadpool(thread_pool *tp);
+//makes the thread pool wait unltil  the Queue is empty to enter the next F tasks
 void thread_pool_wait(thread_pool* pool);
+
 #endif
