@@ -29,7 +29,16 @@ void add_task(void(*func)(void*), void* z){
 	/*task_counter++;
 	if(task_counter<max_task)
 	{**/
+	
+	//if(task_counter<max_task){
 	thread_pool_insert_task(tp,func,z);
+	/*task_counter++;
+	}
+	else{
+		printf("waiting for thread pool to finish %d tasks\n",max_task);
+		 thread_pool_wait(tp);
+		 task_counter=0;
+	}
 	/*}
 	else
 	{

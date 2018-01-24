@@ -8,7 +8,7 @@
 
 #define SEED 35791246
 
-int count=0;
+//int count=0;
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 /*
@@ -41,18 +41,30 @@ void *runner() {
    // pthread_mutex_unlock(&mutex);
 }
 */
+//int main_count=0;
 void *func(void * a)
 {
-    pthread_mutex_lock(&mutex);
+    //pthread_mutex_lock(&mutex);
+    int* count = (int*)malloc(sizeof(int));
+    *count = 0;    
     double x,y,z;
     x=(double)rand()/RAND_MAX;
     y=(double)rand()/RAND_MAX;
     z=x*x+y*y;
-    if(z<=1)count++;
-    int tmp=count;
+    if(z<=1){;
+    //main_count++;
+    (*count)++;//==main_count;
+    }
+   // int tmp=count;
    // pthread_exit(tmp);
   // return(void *)tmp;
-    pthread_mutex_unlock(&mutex);
+  struct TaskRetData* trd = (struct TaskRetData*)malloc(sizeof(struct TaskRetData));
+  trd->buffer = count;
+  trd->size = sizeof(*count);
+  return trd;
+    //pthread_mutex_unlock(&mutex);
+    //printf("thread :%d  doing task\n",pthread_self());
+    // return &dr;
    //return &tmp;
 }
 int main(int argc, char *argv[])
@@ -81,9 +93,21 @@ for(int i=0;i<itreations;i++)
 }
 
 destroy();
+int count = 0;
+/*
+int* pool = (int*)thread_pool_manager_get_pool();
+
+
+for (int i = 0; i < num_results / 2; ++i)
+{
+    int size = pool[i];
+    int value = pool[i + 1];
+    count += value;
+}*/
 
 pi=(double)count/itreations*4;
 printf("pi :%f\n\n",pi);
+
 }
 
 
