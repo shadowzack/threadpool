@@ -13,7 +13,7 @@ thread_pool* tp;
 
 void init(int N,int T ,int F){
 	max_task=F;
-	tp=create(N,T,F);
+	tp=create(N,T);
 	printf("num of threads is: %d threads\n",N);
 
 }

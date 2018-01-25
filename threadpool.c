@@ -1,15 +1,12 @@
 #include "threadpool.h"
 
 typedef enum {
-
 	FINISH_CURRENT = 1, WAIT_FOR_QUEUE = 2
 } ShutdownType;
 
 static int counter =0;
-static int T;
-static int curser=0;
-static int max_task_count_per_push=0;
-static int broadcat_flag=0;
+static int T;			//thread per task
+static int curser=0;	//curser in  thread array 
 static int task_log_counter=0;
 static FILE* log=NULL;
 
@@ -27,15 +24,15 @@ void * run(void *pool)
 		/* lock each thread and wait on con var */
 		pthread_mutex_lock(&(main_thread_pool->lock));
 		/* cheak if there is no tasks */
-		while (((main_thread_pool->num_of_tasks == 0) && (!main_thread_pool->is_distroy))) 
+		while (((main_thread_pool->num_of_tasks == 0) && (!main_thread_pool->shutdown))) 
 		{
 			
 		pthread_cond_wait(&(main_thread_pool->notify), &(main_thread_pool->lock));
 		
 		}
 
-		if ((main_thread_pool->is_distroy == FINISH_CURRENT)
-				|| ((main_thread_pool->is_distroy == WAIT_FOR_QUEUE)
+		if ((main_thread_pool->shutdown == FINISH_CURRENT)
+				|| ((main_thread_pool->shutdown == WAIT_FOR_QUEUE)
 						&& (main_thread_pool->num_of_tasks == 0))) 
 						{
 
@@ -43,12 +40,9 @@ void * run(void *pool)
 						}
 
 
-	
-		
-
 		main_task = (task*) Top(main_thread_pool->task_q);
 		int f=0;
-//here we check if this thread is in tids
+		//here we check if this thread is in tids
 	for(int z=0;z<T;z++)
 	{
 	
@@ -132,10 +126,9 @@ void thread_pool_wait(thread_pool* pool){
 }
 
 
-thread_pool * create(int num_threads,int threads_per_task,int max_task_count){
+thread_pool * create(int num_threads,int threads_per_task){
 
 	T=threads_per_task;
-	max_task_count_per_push=max_task_count;
 
 	if (num_threads <= 0)
 	{
@@ -185,10 +178,8 @@ thread_pool * create(int num_threads,int threads_per_task,int max_task_count){
 		return NULL;
 	}
 
-	
-
 	tp->num_of_threads = num_threads;
-	tp->is_distroy = 0;
+	tp->shutdown = 0;
 	tp->available_thread_count = num_threads;
 	tp->num_of_tasks = 0;
 	tp->mem_pool_offset=0;
@@ -199,7 +190,7 @@ thread_pool * create(int num_threads,int threads_per_task,int max_task_count){
 	if(!tp->results || !tp->mem_pool)
 	{
 		free_threadpool(tp);
-		perror("create():results malloc");
+		perror("create():results or mem_pool malloc");
 		return NULL;
 	}
 
@@ -219,7 +210,6 @@ thread_pool * create(int num_threads,int threads_per_task,int max_task_count){
 }
 
 
-
 int free_threadpool(thread_pool *pool){
 
 		if(pool==NULL)
@@ -233,6 +223,7 @@ int free_threadpool(thread_pool *pool){
 		pthread_mutex_lock(&(pool->lock));
 		pthread_mutex_destroy(&(pool->lock));
 		pthread_cond_destroy(&(pool->notify));
+		pthread_cond_destroy(&(pool->thread_wait_F));
 		fclose(log);
 	
 		free(pool);
@@ -240,8 +231,7 @@ int free_threadpool(thread_pool *pool){
 	
 	}
 
-
-
+/*join with all threads and save the data to memory pool*/
 	char* join_threadpool(thread_pool *pool,int wait_task_flag){
 		
 			if(pool==NULL)
@@ -249,14 +239,13 @@ int free_threadpool(thread_pool *pool){
 		
 			if(pthread_mutex_lock(&(pool->lock))!=0)
 				return NULL;
-		
 			
 				do{
 
 					if (wait_task_flag == 0) {
-						pool->is_distroy = FINISH_CURRENT;
+						pool->shutdown = FINISH_CURRENT;
 					} else {
-						pool->is_distroy = WAIT_FOR_QUEUE;
+						pool->shutdown = WAIT_FOR_QUEUE;
 			
 					}
 					/* 	call all threads */
@@ -266,8 +255,7 @@ int free_threadpool(thread_pool *pool){
 				
 						break;
 					}
-			
-			
+		
 					/* Join all thread and get the return value */
 					void* ret;
 					for (int i = 0;i< pool->num_of_threads; i++) {
@@ -276,8 +264,6 @@ int free_threadpool(thread_pool *pool){
 				
 						}
 						}
-
-
 			task_data** trd=(task_data**)malloc(sizeof(char)*10000000);
 					trd = (task_data**)ret;
 	
@@ -292,13 +278,9 @@ int free_threadpool(thread_pool *pool){
                     pool->mem_pool_offset +=trd[z]->size;
 
                 }
-          
-					
-						
+          			
 				}while(0);
 				
-	
-			
 		return pool->mem_pool;
 		}
 
@@ -314,7 +296,7 @@ int thread_pool_insert_task(thread_pool *pool, void(*task_f)(void*), void *arg){
 			
 	
 
-	if (!pool || !task_f || pool->is_distroy!=0) {
+	if (!pool || !task_f || pool->shutdown!=0) {
 		printf("insert():error\n");
 		return -1;
 	}
@@ -356,8 +338,6 @@ int thread_pool_insert_task(thread_pool *pool, void(*task_f)(void*), void *arg){
 		if (pthread_cond_broadcast(&(pool->notify)) != 0) {
 			printf("insert():pthread_cond_broadcast fails\n");
 			break;
-		
-		
 		
 		}
 	} while (0);

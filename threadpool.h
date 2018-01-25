@@ -8,8 +8,6 @@
 
 #include "queue.h"
 
-pthread_cond_t wait_for_tp;
-pthread_mutex_t wait_for_tp_mutex;
 typedef struct TaskRetData
 {
     void *buffer;
@@ -19,25 +17,19 @@ typedef struct TaskRetData
 
 typedef struct ThreadPool
 {
-    pthread_mutex_t lock;
-    pthread_cond_t notify;
-
-    pthread_mutex_t thread_wait_mutex;
-    pthread_mutex_t thread_wait_mutex_infi;
-    pthread_t wait_thread;
-    pthread_cond_t ultranotify;
-    pthread_cond_t thread_wait_F;
-    Queue * task_q;
-    task_data ** results;
+    pthread_mutex_t lock;           //for locking
+    pthread_cond_t notify;          //notify threads on insert task
+    pthread_cond_t thread_wait_F;   //notify when queue is empty
+    Queue * task_q;                 //task queue
+    task_data ** results;           //results returned from each task
     int count;
-    char * mem_pool;
-    int mem_pool_offset;
-    pthread_t *threads;
-    pthread_t join_thread;
+    char * mem_pool;                //our memory pool for results
+    int mem_pool_offset;            //offset inide memory pool
+    pthread_t *threads;             //array of theads
     int num_of_threads;
-    int is_distroy;
-    int thread_pool_free_flag;
-    int available_thread_count;
+    int shutdown;                   //checks if we should shut down
+    int thread_pool_free_flag;      //free data structure data flag
+    int available_thread_count;     //threads that arent working
     int num_of_tasks;
 
 } thread_pool;
@@ -51,7 +43,7 @@ typedef struct Task
 
 
 //initalizing the thread pool
-thread_pool *create(int num_threads,int threads_per_task,int max_task_count);
+thread_pool *create(int num_threads,int threads_per_task);
 //destroing the thread pool
 void destroy_threadpool(thread_pool *tp);
 //retrun a memory pool with the results
