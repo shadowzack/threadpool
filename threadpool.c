@@ -10,6 +10,8 @@ static int T;
 static int curser=0;
 static int max_task_count_per_push=0;
 static int broadcat_flag=0;
+static int task_log_counter=0;
+static FILE* log=NULL;
 
 void * run(void *pool)
 {
@@ -78,33 +80,28 @@ void * run(void *pool)
 		if(main_task!=NULL)
 			--main_thread_pool->num_of_tasks;
 
-	
+		//if the queue is empty we send signal to the wait function to recive next f tasks
+		if(!main_thread_pool->num_of_tasks)
+			pthread_cond_signal(&(main_thread_pool->thread_wait_F));
+
 		if (main_task != NULL ) {
 
 			if (main_task->task_f != NULL)
 			{
-				void* res = main_task->task_f(main_task->arg);
-				task_data* trd = (task_data*)res;
-
-				
-			  int * tmp=(int *)malloc(sizeof trd->buffer);
-			  tmp=*(int*)trd->buffer;
-			  trd->buffer=tmp;
-				main_thread_pool->results[main_thread_pool->count++] = trd;
-			
-				main_thread_pool->available_thread_count++;
-				/*if (main_thread_pool->available_thread_count==main_thread_pool->num_of_threads) {
-				pthread_cond_signal(&main_thread_pool->thread_wait_F);
-			
-			}*/
+				//save rertunred data from task into resulte array
+				 void* res = main_task->task_f(main_task->arg);
+				 task_data* trd = (task_data*)res;
+			 	 int * tmp=(int *)malloc(sizeof trd->buffer);
+			 	 tmp=*(int*)trd->buffer;
+			 	 trd->buffer=tmp;
+				 main_thread_pool->results[main_thread_pool->count++] = trd;
+				 main_thread_pool->available_thread_count++;
+		
 			}
 	
 			if(main_task->tids)
 				free(main_task->tids);
 			free(main_task);
-		
-			
-		
 		
 		
 		}
@@ -117,33 +114,24 @@ void * run(void *pool)
 	return main_thread_pool->results;
 }
 
-//void* joinThread
-/*
-void thread_pool_wait(thread_pool* pool){
-	//pthread_mutex_lock(&pool->thread_wait_mutex);
-	while ((pool->num_of_tasks!=0) || ((pool->num_of_threads)-(pool->available_thread_count))!=0) {
-		printf("finishing tasks in queue\n");
-		pthread_mutex_lock(&pool->thread_wait_mutex);
-		pthread_cond_wait(&pool->thread_wait_F, &pool->thread_wait_mutex);
 
-		pthread_mutex_unlock(&pool->thread_wait_mutex);
+/*wait for thread pool queue of tasks to be empty and then continue*/
+void thread_pool_wait(thread_pool* pool){
+
+	pthread_mutex_lock(&pool->lock);
+	while ((pool->num_of_tasks!=0)) {
+		//printf("finishing tasks in queue\n");
+		
+		pthread_cond_wait(&pool->thread_wait_F, &pool->lock);
+		//printf("signal recive num of tasks = %d \n",pool->num_of_tasks);
+		
 		break;
 	}
-	//pthread_mutex_unlock(&pool->thread_wait_mutex);
+	pthread_mutex_unlock(&pool->lock);
+	
 }
-void * check_wait(void * tp)
-{
-	thread_pool * pool = (thread_pool *)tp;
-	pthread_mutex_lock(&pool->thread_wait_mutex_infi);
-	while(1){
-		if (pool->available_thread_count==pool->num_of_threads) {
-				pthread_cond_signal(&pool->thread_wait_F);
-				//printf("okkkkkkkkkkkkkk\n");
-			}
-	}
-	pthread_mutex_unlock(&pool->thread_wait_mutex_infi);
-}
-*/
+
+
 thread_pool * create(int num_threads,int threads_per_task,int max_task_count){
 
 	T=threads_per_task;
@@ -174,12 +162,21 @@ thread_pool * create(int num_threads,int threads_per_task,int max_task_count){
 		perror("create():queue creation");
 		return NULL;
 	}
-		
-	/*pthread_cond_init(&tp->thread_wait_F, NULL);
-	pthread_mutex_init(&tp->thread_wait_mutex, NULL);
-	pthread_create(&(tp->wait_thread), NULL, check_wait, (void *)tp);
-	pthread_mutex_init(&tp->thread_wait_mutex_infi, NULL);*/
+	log=fopen("task_log.txt","w");
+	if(!log)
+	{
+			printf("create():file log\n");
+		return -1;
+	}
 
+	//init con varible for waiting function
+	if(pthread_cond_init(&(tp->thread_wait_F), NULL)!=0)
+	{
+		free_threadpool(tp);
+		perror("create():con wait");
+		return NULL;
+	}
+	
 	//init for mutex and con varibles
 	if ((pthread_mutex_init(&(tp->lock), NULL) != 0) || (pthread_mutex_init(&(tp->notify), NULL) != 0))
 	{
@@ -232,11 +229,11 @@ int free_threadpool(thread_pool *pool){
 	
 			DestroyQueue(pool->task_q);
 
-
+	
 		pthread_mutex_lock(&(pool->lock));
 		pthread_mutex_destroy(&(pool->lock));
 		pthread_cond_destroy(&(pool->notify));
-
+		fclose(log);
 	
 		free(pool);
 		return 0;
@@ -326,6 +323,7 @@ int thread_pool_insert_task(thread_pool *pool, void(*task_f)(void*), void *arg){
 		printf("insert():lock\n");
 		return -1;
 	}
+	
 
 
 	do {
@@ -333,26 +331,30 @@ int thread_pool_insert_task(thread_pool *pool, void(*task_f)(void*), void *arg){
 		if (!t) {
 			printf("insert():task malloc\n");
 			return -1;
-		}
-	
+		}	
+		
 		t->task_f = (void*)task_f;
 		t->arg = arg;
 		t->tids=(pthread_t *)malloc(sizeof(pthread_t) * T);
-		
-		
+		task_log_counter++;
+		fprintf(log,"task number:%d \n",task_log_counter);
 			for(int f=0;f<T;f++)
 			{
 				t->tids[f]=pool->threads[curser];
-
+				fprintf(log,"thread:%d \n",t->tids[f]);
 				if(curser==pool->num_of_threads)
 						curser=0;
 				curser++;
+
+				
 			}
+			const char* next="\n\n";
+			fprintf(log,"%s",next);
 		Enqueue(pool->task_q, t);
 	
 		pool->num_of_tasks++;
 		if (pthread_cond_broadcast(&(pool->notify)) != 0) {
-			printf("insert():pthread_cond_signal fails\n");
+			printf("insert():pthread_cond_broadcast fails\n");
 			break;
 		
 		
